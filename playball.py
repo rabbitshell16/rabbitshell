@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[31]:
+# In[1]:
 
 
 import pandas as pd
@@ -71,7 +71,7 @@ def single_AB(pitcher,batter,ratio_option = True, ratio_batter = 1, ratio_pitche
     return(res)
 
 
-# In[36]:
+# In[3]:
 
 
 def base_status(res,base,out_count,score):
@@ -974,7 +974,7 @@ def base_status(res,base,out_count,score):
     return(base,out_count,score,res_str)
 
 
-# In[29]:
+# In[4]:
 
 
 def one_innging(team1_batter,team2_starter, team2_bullpen, batter_index, pitcher_index,pitch_count, is_starter = True, print_record = False, return_res_record = False):
@@ -1040,7 +1040,7 @@ def one_innging(team1_batter,team2_starter, team2_bullpen, batter_index, pitcher
     return score, pitch_count, pitcher_index, batter_index
 
 
-# In[39]:
+# In[5]:
 
 
 def single_game(team1_name,team2_name,
@@ -1413,7 +1413,7 @@ def single_game(team1_name,team2_name,
     return df_score, team1_res_batter,team2_res_batter, team1_res_pitcher, team2_res_pitcher,  team1_rbi, team2_rbi, win_pitcher, losing_pitcher 
 
 
-# In[40]:
+# In[6]:
 
 
 def game_simulation(team1_name,team2_name,
@@ -1443,7 +1443,7 @@ def game_simulation(team1_name,team2_name,
         print("")
         print("--------------------------------------------")
         print("--------------------------------------------")
-        print("Game Simulation [",i+1,"]")
+        print("WS Simulation [",i+1,"]")
         print(str(team1_name),"wins by",team1_win/(n/100), "%" )
         print(str(team2_name),"wins by",team2_win/(n/100), "%" )
         #print("Most Simulated Result","[LA : ", LA_bin_list[i]," - ",NY_bin_list[i]," : NY]" )
@@ -1462,4 +1462,95 @@ def game_simulation(team1_name,team2_name,
     sorted_scores = score_freq.most_common()
         
     return team1_total_wins,team2_total_wins,team1_score_list,team2_score_list, sorted_scores
+
+
+# In[7]:
+
+
+def batting_order(df):
+
+    # OPS 기준 정렬
+    df_ops_sorted = df.sort_values(by='OPS', ascending=False).reset_index(drop=True)
+    
+    # 4번 타자: OPS 1위
+    batter_4 = df_ops_sorted.iloc[0]
+    
+    # 3번 타자: OPS 2위
+    batter_3 = df_ops_sorted.iloc[1]
+    
+    batter_5 = df_ops_sorted.iloc[2]
+    
+    # 3,4번 제외한 나머지
+    excluded_players = [batter_3['Player'], batter_4['Player'],batter_5['Player']]
+    remaining_df = df[~df['Player'].isin(excluded_players)]
+    
+    # 1,2번 타자: OBP 기준 상위 2명
+    df_obp_sorted = remaining_df.sort_values(by='OBP', ascending=False).reset_index(drop=True)
+    batter_1 = df_obp_sorted.iloc[0]
+    batter_2 = df_obp_sorted.iloc[1]
+    
+    # 이제 제외된 1~4번 타자 제외한 나머지 5명
+    excluded_players += [batter_1['Player'], batter_2['Player']]
+    remaining_df_final = df[~df['Player'].isin(excluded_players)]
+    
+    # 5~9번 타자: OPS 기준 정렬
+    rest_sorted = remaining_df_final.sort_values(by='OPS', ascending=False).reset_index(drop=True)
+    
+    # 최종 타순 결합
+    final_batting_order = pd.DataFrame([batter_1, batter_2, batter_3, batter_4,batter_5]).reset_index(drop=True)
+    final_batting_order = pd.concat([final_batting_order, rest_sorted], ignore_index=True)
+    
+    return final_batting_order
+
+
+# In[8]:
+
+
+def batter(data):
+    columns =['Player', 'PA','AB', '1B', '2B', '3B', 'HR', 'SO', 'BB']
+    batter = pd.DataFrame(data, columns=columns)
+    
+    batter["1B"] = batter["1B"] - batter["2B"] - batter["3B"] - batter["HR"]
+    batter["OUT"] = batter["AB"] - (batter["1B"] + batter["2B"] + batter["3B"] + batter["HR"] + batter["SO"])
+    batter["FLY"] = (batter["OUT"] / 2).astype(int)
+    batter["POPUP"] = 0
+    batter["GROUND"] = batter["OUT"] - batter["FLY"]
+    
+    batter = batter.drop('AB',axis=1)
+    batter["PA"] = batter["1B"] + batter["2B"] + batter["3B"] + batter["HR"] + batter["SO"] + batter["BB"] + batter["OUT"]
+    
+    batter['OBP'] = ((batter['1B'] + batter['2B'] + batter['3B'] + batter['HR']+ batter['BB']) / batter['PA']).round(3)
+    batter['SLG'] = ((batter['1B'] + 2 * batter['2B'] + 3 * batter['3B'] + 4 * batter['HR']) / (batter['PA'] - batter['BB'] )).round(3)
+    batter['OPS'] = (batter['OBP'] + batter['SLG']).round(3)
+    
+    batter = batting_order(batter)
+    batter = batter.drop(["OBP","SLG","OPS"],axis=1)
+    batter.index = range(1,10)
+    
+    return batter
+
+
+# In[9]:
+
+
+def pitcher(data,number):
+
+    columns =['Player', 'PA', '1B', '2B', '3B', 'HR', 'SO', 'BB']
+    pitcher = pd.DataFrame(data, columns=columns)
+    
+    pitcher["1B"] = pitcher["1B"] - pitcher["2B"] - pitcher["3B"] - pitcher["HR"]
+    pitcher["OUT"] = pitcher["PA"] - (pitcher["1B"] + pitcher["2B"] + pitcher["3B"] + pitcher["HR"] + pitcher["SO"] + pitcher["BB"])
+    pitcher["FLY"] = (pitcher["OUT"] / 2).astype(int)
+    pitcher["POPUP"] = 0
+    pitcher["GROUND"] = pitcher["OUT"] - pitcher["FLY"]
+    
+    pitcher['OBP'] = ((pitcher['1B'] + pitcher['2B'] + pitcher['3B'] + pitcher['HR']+ pitcher['BB']) / pitcher['PA']).round(3)
+    pitcher['SLG'] = ((pitcher['1B'] + 2 * pitcher['2B'] + 3 * pitcher['3B'] + 4 * pitcher['HR']) / (pitcher['PA'] - pitcher['BB'] )).round(3)
+    pitcher['OPS'] = (pitcher['OBP'] + pitcher['SLG']).round(3)
+    
+    pitcher = pitcher.sort_values(by="OPS", ascending=True).reset_index(drop=True)
+    pitcher.index = range(1,number+1)
+    pitcher = pitcher.drop(["OBP","SLG","OPS"],axis=1)
+    
+    return pitcher
 
